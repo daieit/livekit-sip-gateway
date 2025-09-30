@@ -229,6 +229,22 @@ func (s *Server) processInvite(req *sip.Request, tx sip.ServerTransaction) (retE
 		s.log.Errorw("cannot parse source IP", err, "fromIP", src)
 		return psrpc.NewError(psrpc.MalformedRequest, errors.Wrap(err, "cannot parse source IP"))
 	}
+
+	// -- 既存セッションの場合(re-INVITE) --
+	// 既存の Call-ID ヘッダーを取得
+	sipCallID := ""
+	if h := req.CallID(); h != nil {
+		sipCallID = h.Value()
+	}
+
+	// 既存のセッションを検索
+	existingCall := s.getInbondCallBySipCallID(sipCallID)
+	if existingCall != nil {
+		s.log.Infow("re-INVITE detected, forwarding to existing call", "sipCallID", sipCallID)
+		return existingCall.handleReInvite(req, tx)
+	}
+
+	// -- 新規セッションの場合、Call-ID を生成 --
 	callID := lksip.NewCallID()
 	tr := callTransportFromReq(req)
 	legTr := legTransportFromReq(req)
@@ -367,6 +383,26 @@ func (s *Server) processInvite(req *sip.Request, tx sip.ServerTransaction) (retE
 	call = s.newInboundCall(log, cmon, cc, callInfo, state, nil)
 	call.joinDur = joinDur
 	return call.handleInvite(call.ctx, req, r.TrunkID, s.conf)
+}
+
+// 既存コール検索
+func (s *Server) getInbondCallBySipCallID(sipCallID string) *inboundCall {
+	s.cmu.RLock()
+	defer s.cmu.RUnlock()
+	if c, ok := s.activeCalls[callID]; ok {
+		return c
+	}	
+	return nil
+}
+
+// re-INVITE ハンドラ
+func (c *inboundCall) handleReInvite(req *sip.Request, tx sip.ServerTransaction) error {
+	c.log.Infow("Handling re-INVITE", "callID", c.call.SipCallId)
+
+	// ここで必要に応じてSDPの更新やその他の処理を行う
+	// 今はシンプルに200 OKを返すだけの最小限の実装
+	resp := sip.NewResponseFromRequest(req, sip.StatusOK, "OK", nil)
+	return tx.Respond(resp)
 }
 
 func (s *Server) onOptions(log *slog.Logger, req *sip.Request, tx sip.ServerTransaction) {
