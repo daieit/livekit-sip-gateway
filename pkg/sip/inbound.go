@@ -230,15 +230,17 @@ func (s *Server) processInvite(req *sip.Request, tx sip.ServerTransaction) (retE
 		return psrpc.NewError(psrpc.MalformedRequest, errors.Wrap(err, "cannot parse source IP"))
 	}
 
+	// daiei edit here
 	// -- 既存セッションの場合(re-INVITE) --
 	// 既存の Call-ID ヘッダーを取得
 	sipCallID := ""
+	s.log.Infow("processInvite", "CallID", req.CallID())
 	if h := req.CallID(); h != nil {
 		sipCallID = h.Value()
 	}
-
+  // daiei edit here
 	// 既存のセッションを検索
-	existingCall := s.getInbondCallBySipCallID(sipCallID)
+	existingCall := s.getInboundCallByCallID(sipCallID)
 	if existingCall != nil {
 		s.log.Infow("re-INVITE detected, forwarding to existing call", "sipCallID", sipCallID)
 		return existingCall.handleReInvite(req, tx)
@@ -303,10 +305,10 @@ func (s *Server) processInvite(req *sip.Request, tx sip.ServerTransaction) (retE
 	}
 
 	// Extract SIP Call ID directly from the request
-	sipCallID := ""
-	if h := req.CallID(); h != nil {
-		sipCallID = h.Value()
-	}
+	//sipCallID := ""
+	//if h := req.CallID(); h != nil {
+	//	sipCallID = h.Value()
+	//}
 
 	callInfo := &rpc.SIPCall{
 		LkCallId:  callID,
@@ -385,20 +387,26 @@ func (s *Server) processInvite(req *sip.Request, tx sip.ServerTransaction) (retE
 	return call.handleInvite(call.ctx, req, r.TrunkID, s.conf)
 }
 
+// daiei edit here
 // 既存コール検索
-func (s *Server) getInbondCallBySipCallID(sipCallID string) *inboundCall {
-	s.cmu.RLock()
-	defer s.cmu.RUnlock()
-	if c, ok := s.activeCalls[callID]; ok {
-		return c
-	}	
-	return nil
+func (s *Server) getInboundCallByCallID(callID string) *inboundCall {
+		s.log.Infow("getInboundCallByCallID", "callID", callID)
+    s.cmu.RLock()
+    defer s.cmu.RUnlock()
+    for _, c := range s.activeCalls {
+        if c != nil && c.call != nil && c.call.SipCallId == callID {
+            return c  // ← *inboundCall を返す
+        }
+    }
+    return nil
 }
 
+// daiei edit here
 // re-INVITE ハンドラ
 func (c *inboundCall) handleReInvite(req *sip.Request, tx sip.ServerTransaction) error {
 	c.log.Infow("Handling re-INVITE", "callID", c.call.SipCallId)
-
+	c.log.Infow("Handling re-INVITE", "Request", req)
+	c.log.Infow("Handling re-INVITE", "ServerTransaction", tx)
 	// ここで必要に応じてSDPの更新やその他の処理を行う
 	// 今はシンプルに200 OKを返すだけの最小限の実装
 	resp := sip.NewResponseFromRequest(req, sip.StatusOK, "OK", nil)
