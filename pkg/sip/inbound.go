@@ -241,6 +241,8 @@ func (s *Server) processInvite(req *sip.Request, tx sip.ServerTransaction) (retE
   // daiei edit here
 	// 既存のセッションを検索
 	existingCall := s.getInboundCallByCallID(sipCallID)
+  s.log.Infow("existingCall", "existingCall-", existingCall)
+
 	if existingCall != nil {
 		s.log.Infow("re-INVITE detected, forwarding to existing call", "sipCallID", sipCallID)
 		return existingCall.handleReInvite(req, tx)
@@ -384,6 +386,11 @@ func (s *Server) processInvite(req *sip.Request, tx sip.ServerTransaction) (retE
 
 	call = s.newInboundCall(log, cmon, cc, callInfo, state, nil)
 	call.joinDur = joinDur
+
+	s.log.Infow("processInvite", "call-", call)
+	s.log.Infow("processInvite", "r.TrunkID-", r.TrunkID)
+	s.log.Infow("processInvite", "s.conf-", s.conf)
+
 	return call.handleInvite(call.ctx, req, r.TrunkID, s.conf)
 }
 
@@ -393,7 +400,12 @@ func (s *Server) getInboundCallByCallID(callID string) *inboundCall {
 		s.log.Infow("getInboundCallByCallID", "callID", callID)
     s.cmu.RLock()
     defer s.cmu.RUnlock()
+		s.log.Infow("getInboundCallByCallID", "s.activeCalls", s.activeCalls)
     for _, c := range s.activeCalls {
+					s.log.Infow("getInboundCallByCallID", "c", c)
+					s.log.Infow("getInboundCallByCallID", "c.call", c.call)
+					s.log.Infow("getInboundCallByCallID", "c.call.SipCallId", c.call.SipCallId)
+
         if c != nil && c.call != nil && c.call.SipCallId == callID {
             return c  // ← *inboundCall を返す
         }
