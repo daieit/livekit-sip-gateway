@@ -200,6 +200,50 @@ func (s *Server) handleInviteAuth(log logger.Logger, req *sip.Request, tx sip.Se
 }
 
 func (s *Server) onInvite(log *slog.Logger, req *sip.Request, tx sip.ServerTransaction) {
+
+	s.log.Infow("onInvite")
+	s.log.Infow("onInvite", "log", log)
+	s.log.Infow("onInvite", "req", req)
+	s.log.Infow("onInvite", "tx", tx)
+	s.log.Infow("onInvite", "s", s)
+
+	// 既存の Call-ID ヘッダーを取得
+	sipCallID := ""
+	if h := req.CallID(); h != nil {
+		sipCallID = h.Value()
+	}
+	s.log.Infow("onInvite", "req.CallID()", req.CallID())
+	s.log.Infow("onInvite", "sipCallID",sipCallID)
+
+	// 既存のセッションを検索
+
+	tag, err := getFromTag(req)
+
+	s.log.Infow("onInvite", "tag", tag)
+	s.log.Infow("onInvite", "err", err)
+
+	if err != nil {
+		_ = s.processInvite(req, tx)
+		return
+	}
+
+
+	s.cmu.RLock()
+	activeCalls := s.activeCalls[tag]
+	s.cmu.RUnlock()
+
+	s.log.Infow("onInvite", "activeCalls", activeCalls)
+	s.log.Infow("onInvite", "activeCalls.call", activeCalls.call)
+	s.log.Infow("onInvite", "activeCalls.call.SipCallId", activeCalls.call.SipCallId)
+  s.log.Infow("Re-INVITE detected", "sipCallID", sipCallID)
+  if activeCalls != nil && activeCalls.call != nil && activeCalls.call.SipCallId == sipCallID {
+				s.log.Infow("onInvite2", "activeCalls2", activeCalls)
+
+        s.handleReInvite(log, req, tx)
+        return
+    }
+    s.log.Infow("New INVITE detected", "CallID", sipCallID)
+
 	// Error processed in defer
 	_ = s.processInvite(req, tx)
 }
@@ -233,7 +277,7 @@ func (s *Server) processInvite(req *sip.Request, tx sip.ServerTransaction) (retE
 	// daiei edit here
 	// -- 既存セッションの場合(re-INVITE) --
 	// 既存の Call-ID ヘッダーを取得
-	sipCallID := ""
+	/*sipCallID := ""
 	s.log.Infow("processInvite", "CallID", req.CallID())
 	if h := req.CallID(); h != nil {
 		sipCallID = h.Value()
@@ -246,7 +290,7 @@ func (s *Server) processInvite(req *sip.Request, tx sip.ServerTransaction) (retE
 	if existingCall != nil {
 		s.log.Infow("re-INVITE detected, forwarding to existing call", "sipCallID", sipCallID)
 		return existingCall.handleReInvite(req, tx)
-	}
+	}*/
 
 	// -- 新規セッションの場合、Call-ID を生成 --
 	callID := lksip.NewCallID()
@@ -307,10 +351,10 @@ func (s *Server) processInvite(req *sip.Request, tx sip.ServerTransaction) (retE
 	}
 
 	// Extract SIP Call ID directly from the request
-	//sipCallID := ""
-	//if h := req.CallID(); h != nil {
-	//	sipCallID = h.Value()
-	//}
+	sipCallID := ""
+	if h := req.CallID(); h != nil {
+		sipCallID = h.Value()
+	}
 
 	callInfo := &rpc.SIPCall{
 		LkCallId:  callID,
@@ -396,7 +440,7 @@ func (s *Server) processInvite(req *sip.Request, tx sip.ServerTransaction) (retE
 
 // daiei edit here
 // 既存コール検索
-func (s *Server) getInboundCallByCallID(callID string) *inboundCall {
+/*func (s *Server) getInboundCallByCallID(callID string) *inboundCall {
 		s.log.Infow("getInboundCallByCallID", "callID", callID)
     s.cmu.RLock()
     defer s.cmu.RUnlock()
@@ -411,18 +455,17 @@ func (s *Server) getInboundCallByCallID(callID string) *inboundCall {
         }
     }
     return nil
-}
+}*/
 
 // daiei edit here
 // re-INVITE ハンドラ
-func (c *inboundCall) handleReInvite(req *sip.Request, tx sip.ServerTransaction) error {
-	c.log.Infow("Handling re-INVITE", "callID", c.call.SipCallId)
-	c.log.Infow("Handling re-INVITE", "Request", req)
-	c.log.Infow("Handling re-INVITE", "ServerTransaction", tx)
+func (s *Server) handleReInvite(log *slog.Logger, req *sip.Request, tx sip.ServerTransaction) {
+	s.log.Infow("Handling re-INVITE", "Request", req)
+	s.log.Infow("Handling re-INVITE", "ServerTransaction", tx)
 	// ここで必要に応じてSDPの更新やその他の処理を行う
 	// 今はシンプルに200 OKを返すだけの最小限の実装
 	resp := sip.NewResponseFromRequest(req, sip.StatusOK, "OK", nil)
-	return tx.Respond(resp)
+	_ = tx.Respond(resp)
 }
 
 func (s *Server) onOptions(log *slog.Logger, req *sip.Request, tx sip.ServerTransaction) {
